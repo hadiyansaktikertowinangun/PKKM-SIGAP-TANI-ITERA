@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SIGAP TANI — Smart Farming Dashboard</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- Google Fonts: Orbitron (display) + Rajdhani (body) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <!-- MQTT.js via CDN — diperlukan untuk koneksi ke HiveMQ broker -->
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+</head>
+<body>
+
+  <!-- ═══════════════════════════════════════════════
+       HEADER — Branding + Status Koneksi MQTT
+  ═══════════════════════════════════════════════ -->
+  <header class="site-header">
+    <div class="header-bg-image" aria-hidden="true"></div>
+    <div class="header-overlay" aria-hidden="true"></div>
+
+    <div class="header-content">
+      <div class="brand">
+        <div class="brand-icon">
+          <svg viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M24 4L6 14V34L24 44L42 34V14L24 4Z" stroke="var(--green)" stroke-width="2" fill="none"/>
+            <path d="M24 4V44M6 14L42 34M42 14L6 34" stroke="var(--green)" stroke-width="1" opacity="0.4"/>
+            <circle cx="24" cy="24" r="6" fill="var(--green)" opacity="0.9"/>
+            <circle cx="24" cy="24" r="10" stroke="var(--green)" stroke-width="1" opacity="0.4"/>
+          </svg>
+        </div>
+        <div class="brand-text">
+          <h1 class="brand-title">SIGAP TANI</h1>
+          <p class="brand-subtitle">Smart Integrated Guard for Agricultural Pest & Technology</p>
+        </div>
+      </div>
+
+      <!-- Status Koneksi MQTT -->
+      <div class="mqtt-status-badge" id="mqttStatusBadge">
+        <span class="status-dot" id="statusDot"></span>
+        <span class="status-label" id="statusLabel">Menghubungkan...</span>
+      </div>
+    </div>
+
+    <!-- Ticker info -->
+    <div class="header-ticker">
+      <div class="ticker-track">
+        <span>🌾 SIGAP TANI — Sistem Cerdas Pemantauan Hama &amp; Energi Sawah</span>
+        <span>⚡ Solar Tracker Aktif — Optimasi Panel Otomatis</span>
+        <span>🛡️ Proteksi Hama Real-Time via Sensor PIR</span>
+        <span>📡 Terhubung ke HiveMQ MQTT Broker</span>
+        <span>🌾 SIGAP TANI — Sistem Cerdas Pemantauan Hama &amp; Energi Sawah</span>
+        <span>⚡ Solar Tracker Aktif — Optimasi Panel Otomatis</span>
+        <span>🛡️ Proteksi Hama Real-Time via Sensor PIR</span>
+        <span>📡 Terhubung ke HiveMQ MQTT Broker</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ═══════════════════════════════════════════════
+       MAIN DASHBOARD GRID
+  ═══════════════════════════════════════════════ -->
+  <main class="dashboard-main">
+
+    <!-- ── ROW 1: Hama Status (lebar penuh) ── -->
+    <section class="card card--pest card--full" id="cardPest">
+      <div class="card-label">
+        <span class="label-dot"></span>SENSOR PIR — DETEKSI HAMA
+      </div>
+      <div class="pest-content">
+        <div class="pest-indicator" id="pestIndicator">
+          <div class="pest-radar">
+            <div class="radar-ring ring-1"></div>
+            <div class="radar-ring ring-2"></div>
+            <div class="radar-ring ring-3"></div>
+            <div class="radar-icon" id="radarIcon">
+              <!-- Ikon hewan ketika aman -->
+              <svg viewBox="0 0 24 24" class="icon-safe" id="iconSafe">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z" fill="currentColor"/>
+              </svg>
+              <!-- Ikon peringatan ketika hama terdeteksi -->
+              <svg viewBox="0 0 24 24" class="icon-alert" id="iconAlert">
+                <path d="M12 2L1 21h22L12 2zm0 3.99L19.53 19H4.47L12 5.99zM11 10v4h2v-4h-2zm0 6v2h2v-2h-2z" fill="currentColor"/>
+              </svg>
+            </div>
+          </div>
+        </div>
+        <div class="pest-info">
+          <p class="pest-status-text" id="pestStatusText">AMAN</p>
+          <p class="pest-detail" id="pestDetail">Tidak ada pergerakan hama terdeteksi</p>
+          <div class="pest-meta">
+            <div class="pest-meta-item">
+              <span class="meta-label">LAST TRIGGER</span>
+              <span class="meta-value" id="lastTriggerTime">--:--:--</span>
+            </div>
+            <div class="pest-meta-item">
+              <span class="meta-label">TOTAL DETEKSI HARI INI</span>
+              <span class="meta-value" id="totalDetections">0</span>
+            </div>
+            <div class="pest-meta-item">
+              <span class="meta-label">TOPIC</span>
+              <span class="meta-value topic-tag" id="pirTopicTag">sigaptani/pir</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ── ROW 2: Power Data (INA219) ── -->
+    <section class="card card--power" id="cardPower">
+      <div class="card-label">
+        <span class="label-dot"></span>INA219 — DATA KELISTRIKAN SOLAR
+      </div>
+      <div class="power-grid">
+        <div class="power-metric" id="metricVoltage">
+          <div class="metric-icon">⚡</div>
+          <div class="metric-bar-wrap">
+            <div class="metric-bar" id="barVoltage"></div>
+          </div>
+          <div class="metric-value" id="voltageValue">0.00</div>
+          <div class="metric-unit">Volt</div>
+          <div class="metric-label">TEGANGAN</div>
+        </div>
+        <div class="power-metric" id="metricCurrent">
+          <div class="metric-icon">〜</div>
+          <div class="metric-bar-wrap">
+            <div class="metric-bar" id="barCurrent"></div>
+          </div>
+          <div class="metric-value" id="currentValue">0.00</div>
+          <div class="metric-unit">mA</div>
+          <div class="metric-label">ARUS</div>
+        </div>
+        <div class="power-metric" id="metricPower">
+          <div class="metric-icon">◈</div>
+          <div class="metric-bar-wrap">
+            <div class="metric-bar" id="barPower"></div>
+          </div>
+          <div class="metric-value" id="powerValue">0.00</div>
+          <div class="metric-unit">Watt</div>
+          <div class="metric-label">DAYA</div>
+        </div>
+      </div>
+      <div class="power-chart-area">
+        <canvas id="powerChart" height="80"></canvas>
+      </div>
+    </section>
+
+    <!-- ── ROW 2: Relay Control ── -->
+    <section class="card card--relay" id="cardRelay">
+      <div class="card-label">
+        <span class="label-dot"></span>RELAY — KONTROL AKTUATOR
+      </div>
+      <div class="relay-controls">
+
+        <!-- Relay 1: UV Trap -->
+        <div class="relay-item" id="relayUVItem">
+          <div class="relay-icon-wrap">
+            <div class="relay-icon-bg"></div>
+            <svg class="relay-icon-svg" viewBox="0 0 24 24" fill="none">
+              <circle cx="12" cy="12" r="5" stroke="currentColor" stroke-width="2"/>
+              <path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="relay-info">
+            <p class="relay-name">UV Trap</p>
+            <p class="relay-desc">Jebakan Cahaya Ultraviolet</p>
+            <p class="relay-state" id="uvTrapState">MATI</p>
+          </div>
+          <label class="toggle-switch" title="Toggle UV Trap">
+            <input type="checkbox" id="toggleUVTrap" onchange="handleRelayToggle('uvtrap', this.checked)" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="relay-divider"></div>
+
+        <!-- Relay 2: Speaker -->
+        <div class="relay-item" id="relaySpeakerItem">
+          <div class="relay-icon-wrap">
+            <div class="relay-icon-bg"></div>
+            <svg class="relay-icon-svg" viewBox="0 0 24 24" fill="none">
+              <path d="M11 5L6 9H2v6h4l5 4V5z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/>
+              <path d="M15.54 8.46a5 5 0 010 7.07M19.07 4.93a10 10 0 010 14.14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+          </div>
+          <div class="relay-info">
+            <p class="relay-name">Speaker</p>
+            <p class="relay-desc">Pengusir Hama Ultrasonik</p>
+            <p class="relay-state" id="speakerState">MATI</p>
+          </div>
+          <label class="toggle-switch" title="Toggle Speaker">
+            <input type="checkbox" id="toggleSpeaker" onchange="handleRelayToggle('speaker', this.checked)" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+      </div>
+      <div class="relay-footer">
+        <span class="relay-topic-info">Publish ke: <code>sigaptani/relay/uvtrap</code> &amp; <code>sigaptani/relay/speaker</code></span>
+      </div>
+    </section>
+
+    <!-- ── ROW 3: Solar Tracker ── -->
+    <section class="card card--tracker card--full" id="cardTracker">
+      <div class="card-label">
+        <span class="label-dot"></span>SOLAR TRACKER — 4× LDR + MOTOR DC (L298N)
+      </div>
+      <div class="tracker-layout">
+
+        <!-- Grid 4 LDR -->
+        <div class="ldr-section">
+          <p class="section-subtitle">Intensitas Cahaya LDR</p>
+          <div class="ldr-grid">
+            <div class="ldr-cell ldr-top-left" id="ldrTL">
+              <div class="ldr-label">KIRI ATAS</div>
+              <div class="ldr-ring-wrap">
+                <svg class="ldr-ring-svg" viewBox="0 0 80 80">
+                  <circle class="ring-bg" cx="40" cy="40" r="34" />
+                  <circle class="ring-fill ldr-ring-path" id="ringTL" cx="40" cy="40" r="34"
+                    stroke-dasharray="213.63" stroke-dashoffset="213.63" />
+                </svg>
+                <div class="ldr-value-wrap">
+                  <span class="ldr-value" id="valTL">0</span>
+                  <span class="ldr-unit">lux</span>
+                </div>
+              </div>
+            </div>
+            <div class="ldr-cell ldr-top-right" id="ldrTR">
+              <div class="ldr-label">KANAN ATAS</div>
+              <div class="ldr-ring-wrap">
+                <svg class="ldr-ring-svg" viewBox="0 0 80 80">
+                  <circle class="ring-bg" cx="40" cy="40" r="34" />
+                  <circle class="ring-fill ldr-ring-path" id="ringTR" cx="40" cy="40" r="34"
+                    stroke-dasharray="213.63" stroke-dashoffset="213.63" />
+                </svg>
+                <div class="ldr-value-wrap">
+                  <span class="ldr-value" id="valTR">0</span>
+                  <span class="ldr-unit">lux</span>
+                </div>
+              </div>
+            </div>
+            <div class="ldr-cell ldr-bot-left" id="ldrBL">
+              <div class="ldr-label">KIRI BAWAH</div>
+              <div class="ldr-ring-wrap">
+                <svg class="ldr-ring-svg" viewBox="0 0 80 80">
+                  <circle class="ring-bg" cx="40" cy="40" r="34" />
+                  <circle class="ring-fill ldr-ring-path" id="ringBL" cx="40" cy="40" r="34"
+                    stroke-dasharray="213.63" stroke-dashoffset="213.63" />
+                </svg>
+                <div class="ldr-value-wrap">
+                  <span class="ldr-value" id="valBL">0</span>
+                  <span class="ldr-unit">lux</span>
+                </div>
+              </div>
+            </div>
+            <div class="ldr-cell ldr-bot-right" id="ldrBR">
+              <div class="ldr-label">KANAN BAWAH</div>
+              <div class="ldr-ring-wrap">
+                <svg class="ldr-ring-svg" viewBox="0 0 80 80">
+                  <circle class="ring-bg" cx="40" cy="40" r="34" />
+                  <circle class="ring-fill ldr-ring-path" id="ringBR" cx="40" cy="40" r="34"
+                    stroke-dasharray="213.63" stroke-dashoffset="213.63" />
+                </svg>
+                <div class="ldr-value-wrap">
+                  <span class="ldr-value" id="valBR">0</span>
+                  <span class="ldr-unit">lux</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Visualisasi posisi matahari -->
+        <div class="sun-compass-section">
+          <p class="section-subtitle">Posisi Relatif Sumber Cahaya</p>
+          <div class="sun-compass" id="sunCompass">
+            <div class="compass-bg">
+              <div class="compass-cross"></div>
+              <div class="compass-label top">U</div>
+              <div class="compass-label bottom">S</div>
+              <div class="compass-label left">B</div>
+              <div class="compass-label right">T</div>
+            </div>
+            <div class="sun-dot" id="sunDot"></div>
+          </div>
+          <div class="motor-status-wrap">
+            <p class="section-subtitle" style="margin-top:1rem">Status Motor DC (L298N)</p>
+            <div class="motor-status" id="motorStatus">
+              <div class="motor-arrow" id="motorArrow">↑</div>
+              <div class="motor-info">
+                <span class="motor-direction" id="motorDirection">DIAM</span>
+                <span class="motor-speed" id="motorSpeed">Kecepatan: —</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </section>
+
+    <section class="card card--log card--full" id="cardLog">
+      <div class="card-label">
+        <span class="label-dot"></span>LOG AKTIVITAS SENSOR
+      </div>
+      <div class="log-container" id="activityLog">
+        </div>
+    </section>
+
+  </main>
+
+  <!-- ═══════════════════════════════════════════════
+       FOOTER
+  ═══════════════════════════════════════════════ -->
+  <footer class="site-footer">
+    <p>SIGAP TANI &copy; <span id="currentYear"></span> — ESP32 IoT Smart Farming Dashboard</p>
+    <p class="footer-broker">Broker: <code>wss://8511fa93d5ce422c99806a1449b516e4.s1.eu.hivemq.cloud:8884/mqtt</code></p>
+  </footer>
+
+  <!-- Script utama -->
+  <script src="script.js"></script>
+  <script>
+    document.getElementById('currentYear').textContent = new Date().getFullYear();
+  </script>
+</body>
+</html>
